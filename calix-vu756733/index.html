@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Router in My Living Room Was Taking Orders From Strangers (VU#756733)</title>
+<meta name="description" content="How I found an unauthenticated, internet-facing UPnP control service on my ISP-issued Calix router, what it let anyone do, and what happened when I tried to tell the vendor.">
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1a1c1e; --muted:#5b6167; --rule:#e3e6e9;
+    --accent:#b3261e; --code-bg:#f6f7f8; --code-fg:#1a1c1e; --link:#0b5c9e;
+    --chip:#f0f2f4; --quiet:#fafbfc;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#151719; --fg:#e6e8ea; --muted:#98a0a8; --rule:#292d31;
+      --accent:#ff6b61; --code-bg:#1d2023; --code-fg:#e6e8ea;
+      --link:#6fb1f0; --chip:#212529; --quiet:#191c1f;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:17px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:720px; margin:0 auto; padding:56px 20px 96px}
+  header{border-bottom:1px solid var(--rule); padding-bottom:28px; margin-bottom:36px}
+  h1{font-size:2rem; line-height:1.2; margin:0 0 14px; letter-spacing:-.02em}
+  h2{font-size:1.25rem; margin:44px 0 14px; letter-spacing:-.01em}
+  p{margin:0 0 18px}
+  a{color:var(--link); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .meta{color:var(--muted); font-size:.9rem; margin:0}
+  .byline{color:var(--muted); font-size:.92rem; margin:14px 0 0}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0}
+  .chip{background:var(--chip); border:1px solid var(--rule); border-radius:999px;
+    padding:4px 13px; font-size:.78rem; color:var(--muted)}
+  .chip strong{color:var(--fg); font-weight:600}
+  .lead{font-size:1.12rem; line-height:1.6}
+  code{font-family:"SF Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.86em; background:var(--code-bg); padding:.14em .4em; border-radius:4px}
+  pre{background:var(--code-bg); color:var(--code-fg); border:1px solid var(--rule);
+    border-radius:8px; padding:16px; overflow-x:auto; font-size:.8rem; line-height:1.6}
+  pre code{background:none; padding:0; font-size:inherit}
+  table{width:100%; border-collapse:collapse; margin:10px 0 22px; font-size:.94rem}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--rule); vertical-align:top}
+  th{color:var(--muted); font-weight:600; white-space:nowrap; width:42%}
+  ul{margin:0 0 18px; padding-left:22px}
+  li{margin-bottom:7px}
+  ol.timeline{list-style:none; padding:0; margin:10px 0 22px}
+  ol.timeline li{padding:9px 0; border-bottom:1px solid var(--rule); display:flex; gap:16px; margin:0}
+  ol.timeline .date{color:var(--muted); font-variant-numeric:tabular-nums;
+    white-space:nowrap; min-width:104px; font-size:.9rem}
+  .callout{background:var(--quiet); border:1px solid var(--rule);
+    border-left:3px solid var(--accent); border-radius:6px; padding:16px 18px; margin:24px 0}
+  .callout p:last-child{margin-bottom:0}
+  .callout strong{color:var(--fg)}
+  footer{margin-top:52px; padding-top:22px; border-top:1px solid var(--rule);
+    color:var(--muted); font-size:.87rem; line-height:1.6}
+  .cvss{word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="meta">Security research &middot; Coordinated disclosure</p>
+  <h1>The router in my living room was taking orders from strangers</h1>
+  <p class="byline">By Brian Khan Quintana, M.D. &middot; CERT/CC <a href="https://kb.cert.org/vuls/id/756733">VU#756733</a></p>
+  <div class="chips">
+    <span class="chip"><strong>CVSS 3.1</strong> 9.1 Critical</span>
+    <span class="chip">CWE-306</span>
+    <span class="chip">Calix GS5239XG</span>
+    <span class="chip">EXOS 6.6.47</span>
+  </div>
+</header>
+
+<p class="lead">The gateway my internet provider installed in my home was answering commands from anyone on the internet, with no password, no login, and no record that it had happened. A stranger could have opened a door straight through my firewall to any device in my house. This is what I found, how I confirmed it, and what happened when I tried to tell the company that built it.</p>
+
+<h2>The short version</h2>
+<p>My ISP-issued Calix residential gateway exposes its UPnP control service on the public internet. That service is supposed to be reachable only from inside your own home network. On this device it also listens on the outside, on TCP port 5000, and it does whatever it is asked without ever checking who is asking.</p>
+<p>One unauthenticated request from anywhere in the world is enough to open a permanent hole through the router's firewall to any device inside the house. No password. No prompt. Nothing on screen. The rule survives a reboot.</p>
+
+<h2>What UPnP is supposed to do</h2>
+<p>I teach human physiology, so forgive me the comparison, but this is essentially a problem of a barrier that forgot which side it was facing.</p>
+<p>Your router's job is to be a wall between your home and the internet. Unsolicited traffic from outside does not get in. That is the entire point of it.</p>
+<p>UPnP is the polite exception to that rule. When your game console or your printer needs an incoming connection, it asks the router from the inside, and the router opens a specific port for it. The important word is <em>inside</em>. The request is trusted precisely because it can only come from a device already sitting on your network. That is why the protocol never bothered to add authentication: the location of the request <em>was</em> the authentication.</p>
+<p>So when that same control service is also listening on the outside of the wall, the one assumption holding the whole design together is gone. It is not that a lock failed. It is that the door was built without one, because everyone agreed it would only ever be reached from inside the house.</p>
+
+<h2>What I found</h2>
+<p>I was looking at my own connection, doing the kind of inventory anyone can do on hardware they own: what does this thing actually expose to the world?</p>
+<p>Scanning my own public address from outside my network, TCP port 5000 answered. That was the first surprise, since nothing about a residential gateway should be advertising a service there. Requesting <code>rootDesc.xml</code> from that port returned the device's UPnP description document, which politely listed its services and told me exactly where to send commands.</p>
+<p>The second surprise was that the control endpoint worked. I sent a properly formed SOAP request asking the router to create a port mapping, with no credentials of any kind, from a machine that was nowhere near my house. The router returned <code>HTTP 200</code> and created the rule.</p>
+<p>I want to be honest about the feeling there, because I think it matters. I expected a rejection. What I got back was a cheerful confirmation that my firewall had just been reconfigured by a stranger, and that stranger happened to be me.</p>
+
+<h2>The affected device</h2>
+<table>
+  <tr><th>Model</th><td>Calix GS7 XGS <strong>GS5239XG</strong> residential gateway</td></tr>
+  <tr><th>Firmware</th><td>Calix EXOS 6.6.47</td></tr>
+  <tr><th>UPnP daemon</th><td>MiniUPnPd 2.3.7</td></tr>
+  <tr><th>Exposed service</th><td>UPnP IGD <code>WANIPConnection:1</code></td></tr>
+  <tr><th>Exposed on</th><td>WAN interface, TCP port <code>5000</code></td></tr>
+  <tr><th>Weakness</th><td>CWE-306, Missing Authentication for Critical Function</td></tr>
+</table>
+<p>Two endpoints were reachable from the internet. The first, <code>http://[WAN_IP]:5000/rootDesc.xml</code>, is the device description. The second, <code>http://[WAN_IP]:5000/ctl/IPConn</code>, is the control channel that accepts commands.</p>
+<p>Four actions were confirmed working without any authentication, from outside the network:</p>
+<ul>
+  <li><code>AddPortMapping</code>, which creates a new inbound hole through the firewall</li>
+  <li><code>DeletePortMapping</code>, which removes an existing one</li>
+  <li><code>GetGenericPortMappingEntry</code>, which lists what is already mapped</li>
+  <li><code>GetExternalIPAddress</code>, which reports the gateway's public address</li>
+</ul>
+
+<h2>Proof of concept</h2>
+<p>Everything below was run against my own hardware, on my own connection. I re-enabled UPnP only for the length of the test and turned it off again immediately afterward. The request was sent from a host outside my network, and it mapped external TCP port 9999 to an internal address.</p>
+<pre><code>POST /ctl/IPConn HTTP/1.1
+Host: [WAN_IP]:5000
+Content-Type: text/xml; charset="utf-8"
+SOAPAction: "urn:schemas-upnp-org:service:WANIPConnection:1#AddPortMapping"
+
+&lt;?xml version="1.0"?&gt;
+&lt;s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+  s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"&gt;
+ &lt;s:Body&gt;
+  &lt;u:AddPortMapping xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"&gt;
+   &lt;NewRemoteHost&gt;&lt;/NewRemoteHost&gt;
+   &lt;NewExternalPort&gt;9999&lt;/NewExternalPort&gt;
+   &lt;NewProtocol&gt;TCP&lt;/NewProtocol&gt;
+   &lt;NewInternalPort&gt;9999&lt;/NewInternalPort&gt;
+   &lt;NewInternalClient&gt;192.168.1.1&lt;/NewInternalClient&gt;
+   &lt;NewEnabled&gt;1&lt;/NewEnabled&gt;
+   &lt;NewPortMappingDescription&gt;poc&lt;/NewPortMappingDescription&gt;
+   &lt;NewLeaseDuration&gt;0&lt;/NewLeaseDuration&gt;
+  &lt;/u:AddPortMapping&gt;
+ &lt;/s:Body&gt;
+&lt;/s:Envelope&gt;</code></pre>
+<p>A lease duration of <code>0</code> asks for a mapping with no expiration, and the rule was still in place after I power cycled the device. Whatever an attacker opens, stays open.</p>
+
+<h2>Why this is serious</h2>
+<p>Think about what actually sits behind a home router now. Security cameras. Baby monitors. A network drive with tax returns and family photos on it. A work laptop. The management page of the router itself. All of it is protected by one assumption, which is that the outside world cannot reach in and start rearranging things.</p>
+<p>With this flaw, someone who knows the public IP address can:</p>
+<ul>
+  <li>Publish any internal device straight to the internet, including cameras and admin interfaces that were never meant to leave the house</li>
+  <li>Read the existing mapping table to learn what is worth attacking</li>
+  <li>Delete legitimate mappings and quietly break things the household depends on</li>
+</ul>
+<p>None of that requires a password, a phishing email, a malicious download, or a single click from the person who lives there. It is one HTTP request. That is why it scores where it does:</p>
+<p class="cvss"><code>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N</code> = <strong>9.1, Critical</strong></p>
+
+<h2>If you have one of these routers</h2>
+<div class="callout">
+  <p><strong>Turn UPnP off.</strong> On this gateway it is under <code>Admin Panel &rarr; Advanced &rarr; Security &rarr; UPnP</code>, set to <em>Disabled</em>. This closes the exposure until the vendor ships a fix.</p>
+  <p>You will lose automatic port opening, which some games and consoles use. If you need a specific port open, add it by hand in the router's port-forwarding page. That is a small inconvenience compared to leaving the control channel open to the internet, and honestly, it is worth checking your forwarding table anyway to see whether anything is there that you did not put there yourself.</p>
+</div>
+<p>The real fix belongs to the vendor and is not complicated: the UPnP control service should never be bound to or accept requests on the WAN interface. It is a LAN-only function. It always was.</p>
+
+<h2>Trying to tell someone</h2>
+<p>This is the part I did not expect to be the hard part.</p>
+<p>On June 7, 2026 I sent a full technical writeup to the vendor's published security address, to the ISP deploying the hardware, and to CERT/CC, all on the same day. I gave them everything: model, firmware, endpoints, reproduction steps, severity assessment.</p>
+<p>The vendor never substantively responded. Not an acknowledgment, not a ticket number, not a request for more detail.</p>
+<p>CERT/CC opened a formal case and spent weeks trying to reach them through their own preferred channel, a product security web form on their website. I submitted through that form as well, on July 29. It returned a "thank you" on screen and nothing else. No reference number, no confirmation email, no way to even check whether a human had seen it.</p>
+<p>So the advisory is publishing without them.</p>
+<ol class="timeline">
+  <li><span class="date">Jun 7, 2026</span><span>Disclosure sent to the vendor, the deploying ISP, and CERT/CC on the same day.</span></li>
+  <li><span class="date">Jun 26, 2026</span><span>Formal CERT/CC vulnerability report filed.</span></li>
+  <li><span class="date">Jun 27, 2026</span><span>CERT/CC opens case VU#756733 and begins vendor coordination.</span></li>
+  <li><span class="date">July 2026</span><span>Repeated outreach to the vendor through their stated security channel. No response.</span></li>
+  <li><span class="date">Jul 29, 2026</span><span>Report submitted again through the vendor's own product security web form. No ticket issued.</span></li>
+  <li><span class="date">Aug 21, 2026</span><span>Coordinated public disclosure.</span></li>
+</ol>
+
+<h2>What I take from this</h2>
+<p>The technical finding is straightforward. A service was bound to the wrong interface. Someone will fix it in an afternoon once they decide to.</p>
+<p>The part worth sitting with is that the process worked exactly as designed on every side except one. I found something on my own equipment, I did not publish it, I reported it privately and completely, and a neutral coordinator spent two months trying to hand a critical finding to the company that could actually fix it. Every step of that was done in good faith. The only thing missing was someone on the other end willing to pick up.</p>
+<p>I am new to this side of security research. What I have learned is that the disclosure is not the technical work. The technical work is the easy part. The disclosure is patience, documentation, and being willing to keep knocking on a door that may never open, because the people living behind these routers deserve the fix even if nobody ever writes back to say thank you.</p>
+<p>If you are holding a finding and wondering whether it is worth the trouble of reporting it properly: it is. Report it anyway. Someone at CERT/CC will take you seriously even when the vendor does not.</p>
+
+<h2>References</h2>
+<ul>
+  <li>CERT/CC Vulnerability Note <a href="https://kb.cert.org/vuls/id/756733">VU#756733</a></li>
+  <li><a href="https://cwe.mitre.org/data/definitions/306.html">CWE-306: Missing Authentication for Critical Function</a></li>
+  <li>UPnP Internet Gateway Device (IGD) specification, Open Connectivity Foundation</li>
+</ul>
+
+<footer>
+  <p>All testing described here was performed against hardware I own, on my own internet connection, and affected no one else. UPnP was re-enabled only for the duration of testing and disabled immediately afterward. No third-party systems were accessed at any point. This finding was reported privately and held until the coordinated disclosure date set by CERT/CC.</p>
+  <p>Brian Khan Quintana, M.D. &middot; San Diego, California &middot; 2026</p>
+</footer>
+</div>
+</body>
+</html>
